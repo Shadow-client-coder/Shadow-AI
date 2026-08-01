@@ -4,7 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Shadow AI Assistant</title>
+  
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  
   <style>
+    /* ===== TẤT CẢ STYLE ===== */
     :root {
       --bg-gradient: linear-gradient(135deg, #09030e, #180b24, #241038);
       --glass-bg: rgba(25, 15, 38, 0.65);
@@ -59,7 +66,6 @@
     .icon-md { width: 22px; height: 22px; }
     .icon-lg { width: 24px; height: 24px; }
 
-    /* Sidebar */
     .sidebar {
       width: 280px; background: var(--sidebar-bg);
       backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
@@ -96,7 +102,6 @@
     }
     .chat-item:hover, .chat-item.active { background: var(--hover-bg); border-color: var(--glass-border); }
 
-    /* User Info */
     .user-info {
       padding: 15px; border-top: 1px solid var(--glass-border);
       display: flex; align-items: center; gap: 12px;
@@ -108,8 +113,10 @@
       font-size: 20px; font-weight: bold; color: white; flex-shrink: 0;
       cursor: pointer;
       transition: 0.2s;
+      border: 2px solid var(--glass-border);
     }
     .user-avatar:hover { transform: scale(1.05); }
+    .user-avatar.logged-in { border-color: #4ade80; }
     .user-details { flex: 1; min-width: 0; }
     .user-name-wrapper {
       display: flex; align-items: center; gap: 8px;
@@ -129,16 +136,10 @@
       font-size: 13px; opacity: 0.7; 
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-
-    .login-btn {
-      padding: 8px 16px; border-radius: 10px; border: 1px solid var(--glass-border);
-      background: var(--glass-bg); color: var(--text-color); cursor: pointer;
-      font-size: 13px; transition: 0.2s; width: 100%;
-      display: flex; align-items: center; justify-content: center; gap: 8px;
+    .login-status {
+      font-size: 11px; opacity: 0.5; margin-top: 2px;
     }
-    .login-btn:hover { background: var(--hover-bg); }
 
-    /* Settings Popup */
     .settings-popup {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
@@ -173,8 +174,8 @@
     }
     .settings-actions button:hover { background: var(--hover-bg); }
     .settings-actions .save-btn { background: var(--text-muted); color: white; border: none; }
+    .settings-actions .logout-btn { background: #ef4444; color: white; border: none; }
 
-    /* Main Chat Area */
     .main-container { flex: 1; display: flex; flex-direction: column; height: 100vh; position: relative; }
     .header {
       padding: 15px 20px; background: var(--glass-bg);
@@ -202,14 +203,10 @@
       max-width: 100%; max-height: 300px; border-radius: 12px; margin: 5px 0;
       display: block;
     }
-    .msg .file-name {
-      font-size: 12px; opacity: 0.7; margin-top: 4px;
-    }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     .user { align-self: flex-end; background: var(--user-msg); color: #fff; border-bottom-right-radius: 4px; }
     .bot { align-self: flex-start; background: var(--bot-msg); border: 1px solid var(--glass-border); backdrop-filter: blur(10px); border-bottom-left-radius: 4px; }
 
-    /* Typing indicator */
     .typing-indicator {
       align-self: flex-start;
       padding: 12px 16px;
@@ -278,7 +275,6 @@
     .menu-item:last-child { border-bottom: none; }
     .menu-item:hover { background: var(--hover-bg); }
 
-    /* Image preview */
     .image-preview {
       padding: 10px 20px; background: var(--glass-bg);
       border-top: 1px solid var(--glass-border);
@@ -305,19 +301,15 @@
 </head>
 <body>
 
-  <!-- Sidebar -->
+  <!-- SIDEBAR -->
   <div class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <button class="new-chat-btn" onclick="startNewChat()">
-        <span class="icon icon-sm">
-          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
-        </span>
+        <span class="icon icon-sm"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
         Cuộc trò chuyện mới
       </button>
       <button class="close-btn" onclick="toggleSidebar()">
-        <span class="icon">
-          <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </span>
+        <span class="icon"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span>
       </button>
     </div>
     <div class="chat-list" id="chatList"></div>
@@ -328,25 +320,19 @@
         <div class="user-name-wrapper">
           <span class="user-name" id="userDisplayName">Người dùng</span>
           <button class="settings-btn" onclick="openSettings()">
-            <span class="icon icon-sm">
-              <svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-            </span>
+            <span class="icon icon-sm"><svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span>
           </button>
         </div>
         <div class="user-email" id="userEmail">user@gmail.com</div>
+        <div class="login-status" id="loginStatus">Chưa đăng nhập</div>
       </div>
     </div>
   </div>
 
-  <!-- Settings Popup -->
+  <!-- SETTINGS POPUP -->
   <div class="settings-popup" id="settingsPopup">
     <div class="settings-content">
-      <h2>
-        <span class="icon icon-md">
-          <svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-        </span>
-        Cài đặt
-      </h2>
+      <h2><span class="icon icon-md"><svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span> Cài đặt</h2>
       <div class="form-group">
         <label>Tên hiển thị</label>
         <input type="text" id="settingsName" placeholder="Nhập tên của bạn...">
@@ -369,33 +355,29 @@
       </div>
       <div class="settings-actions">
         <button onclick="closeSettings()">Hủy</button>
+        <button class="logout-btn" onclick="logout()" id="logoutBtn" style="display:none;">Đăng xuất</button>
         <button class="save-btn" onclick="saveSettings()">Lưu</button>
       </div>
     </div>
   </div>
 
-  <!-- Main Chat -->
+  <!-- MAIN CHAT -->
   <div class="main-container">
     <div class="header">
       <button class="glass-btn" onclick="toggleSidebar()">
-        <span class="icon">
-          <svg viewBox="0 0 24 24"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
-        </span>
+        <span class="icon"><svg viewBox="0 0 24 24"><path d="M3 12h18M3 6h18M3 18h18"/></svg></span>
       </button>
       <div class="title-area">SHADOW AI</div>
       <button class="theme-btn" onclick="toggleTheme()">
-        <span class="icon icon-sm">
-          <svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        </span>
+        <span class="icon icon-sm"><svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
         <span id="themeLabel">Tối</span>
       </button>
     </div>
 
     <div class="chat-box" id="chatBox">
-      <div class="msg bot">Hệ thống Shadow AI đã kích hoạt. Sẵn sàng tiếp nhận chỉ thị.</div>
+      <div class="msg bot">Hệ thống Shadow AI đã kích hoạt. Đăng nhập để đồng bộ dữ liệu.</div>
     </div>
 
-    <!-- Image Preview -->
     <div class="image-preview" id="imagePreview">
       <img id="previewImage" src="" alt="Preview">
       <span class="preview-info" id="previewInfo">file.jpg</span>
@@ -404,21 +386,15 @@
 
     <div class="plus-menu" id="plusMenu">
       <div class="menu-item" onclick="triggerUpload('file')">
-        <span class="icon icon-sm">
-          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        </span>
+        <span class="icon icon-sm"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
         Tải lên file
       </div>
       <div class="menu-item" onclick="triggerUpload('image')">
-        <span class="icon icon-sm">
-          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-        </span>
+        <span class="icon icon-sm"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></span>
         Tải từ ảnh
       </div>
       <div class="menu-item" onclick="triggerUpload('camera')">
-        <span class="icon icon-sm">
-          <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-        </span>
+        <span class="icon icon-sm"><svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span>
         Camera
       </div>
     </div>
@@ -426,28 +402,49 @@
 
     <div class="input-container">
       <button class="glass-btn" onclick="togglePlusMenu()">
-        <span class="icon">
-          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
-        </span>
+        <span class="icon"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
       </button>
       <textarea id="userInput" rows="1" placeholder="Nhập chỉ thị..." onkeydown="handleKeyDown(event)"></textarea>
       <button class="glass-btn" onclick="sendMsg()">
-        <span class="icon">
-          <svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-        </span>
+        <span class="icon"><svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></span>
       </button>
     </div>
   </div>
 
   <script>
-    // API Key
-    const API_KEY = "AQ.Ab8RN6K_Fcld2hXIYjlTsuibzq-JHxarnJm5S0RafPLORe3w0Q"; // Điền API key của bạn vào đây
+    // ============================================================
+    // 🔥 FIREBASE CONFIG - CỦA BẠN
+    // ============================================================
+    const firebaseConfig = {
+      apiKey: "AIzaSyBnBfEXbIBRoCUQsXFINcvzHQ660yagleQ",
+      authDomain: "shadowai-822a7.firebaseapp.com",
+      projectId: "shadowai-822a7",
+      storageBucket: "shadowai-822a7.firebasestorage.app",
+      messagingSenderId: "101825574282",
+      appId: "1:101825574282:web:25875c4123dc8026e44473",
+      measurementId: "G-B9XV1H5CXG"
+    };
 
-    let sessions = JSON.parse(localStorage.getItem('shadow_sessions')) || [];
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    // ============================================================
+    // GEMINI API KEY - THAY BẰNG KEY CỦA BẠN
+    // ============================================================
+    const API_KEY = "AQ.Ab8RN6JgZtAxnlc-Sh6ogCQCesrOsz4qQt2OVTEMLSyQVlBzWw";
+
+    // ============================================================
+    // APP CODE
+    // ============================================================
+    let sessions = [];
     let currentSessionId = null;
     let pendingImage = null;
+    let currentUser = null;
+    let isSyncing = false;
+    let unsubscribe = null;
 
-    // User settings
     let userSettings = JSON.parse(localStorage.getItem('shadow_user_settings')) || {
       name: 'Người dùng',
       email: 'user@gmail.com',
@@ -464,8 +461,89 @@
       return styles[userSettings.style] || styles.formal;
     }
 
-    function init() {
-      updateUserInfo();
+    // ====== AUTH ======
+    function loginWithGoogle() {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      auth.signInWithPopup(provider).catch(error => {
+        console.error('Login error:', error);
+        alert('Đăng nhập thất bại: ' + error.message);
+      });
+    }
+
+    function logout() {
+      auth.signOut().then(() => {
+        closeSettings();
+        loadLocalData();
+      });
+    }
+
+    // ====== FIREBASE SYNC ======
+    async function syncUserData(user) {
+      if (!user) return;
+      isSyncing = true;
+      const userRef = db.collection('users').doc(user.uid);
+      
+      try {
+        const doc = await userRef.get();
+        if (doc.exists) {
+          const data = doc.data();
+          if (data.settings) {
+            userSettings = { ...userSettings, ...data.settings };
+            localStorage.setItem('shadow_user_settings', JSON.stringify(userSettings));
+            updateUserInfo();
+          }
+          if (data.sessions) {
+            sessions = data.sessions;
+            localStorage.setItem('shadow_sessions', JSON.stringify(sessions));
+            renderChatList();
+            if (sessions.length > 0) {
+              loadSession(sessions[0].id);
+            } else {
+              startNewChat();
+            }
+          }
+        } else {
+          await userRef.set({
+            settings: userSettings,
+            sessions: sessions,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        }
+        
+        if (unsubscribe) unsubscribe();
+        unsubscribe = userRef.onSnapshot((snapshot) => {
+          if (snapshot.exists && !isSyncing) {
+            const data = snapshot.data();
+            if (data.sessions) {
+              sessions = data.sessions;
+              localStorage.setItem('shadow_sessions', JSON.stringify(sessions));
+              renderChatList();
+            }
+          }
+        });
+      } catch (error) {
+        console.error('Sync error:', error);
+      }
+      isSyncing = false;
+    }
+
+    async function saveToFirebase() {
+      if (!currentUser) return;
+      isSyncing = true;
+      try {
+        await db.collection('users').doc(currentUser.uid).set({
+          settings: userSettings,
+          sessions: sessions,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      } catch (error) {
+        console.error('Save error:', error);
+      }
+      isSyncing = false;
+    }
+
+    function loadLocalData() {
+      sessions = JSON.parse(localStorage.getItem('shadow_sessions')) || [];
       renderChatList();
       if (sessions.length > 0) {
         loadSession(sessions[0].id);
@@ -474,6 +552,35 @@
       }
     }
 
+    // ====== AUTH STATE ======
+    auth.onAuthStateChanged((user) => {
+      if (user) {
+        currentUser = user;
+        document.getElementById('userAvatar').classList.add('logged-in');
+        document.getElementById('loginStatus').textContent = '✅ Đã đăng nhập';
+        document.getElementById('logoutBtn').style.display = 'inline-block';
+        
+        userSettings.name = user.displayName || userSettings.name;
+        userSettings.email = user.email || userSettings.email;
+        userSettings.avatar = userSettings.avatar.charAt(0).toUpperCase();
+        localStorage.setItem('shadow_user_settings', JSON.stringify(userSettings));
+        updateUserInfo();
+        
+        syncUserData(user);
+      } else {
+        currentUser = null;
+        document.getElementById('userAvatar').classList.remove('logged-in');
+        document.getElementById('loginStatus').textContent = 'Chưa đăng nhập';
+        document.getElementById('logoutBtn').style.display = 'none';
+        if (unsubscribe) {
+          unsubscribe();
+          unsubscribe = null;
+        }
+        loadLocalData();
+      }
+    });
+
+    // ====== UI FUNCTIONS ======
     function updateUserInfo() {
       document.getElementById('userDisplayName').textContent = userSettings.name;
       document.getElementById('userEmail').textContent = userSettings.email;
@@ -484,7 +591,7 @@
       currentSessionId = 'session_' + Date.now();
       sessions.unshift({ id: currentSessionId, title: "Cuộc trò chuyện mới", history: [] });
       saveAndRender();
-      document.getElementById('chatBox').innerHTML = `<div class="msg bot">Hệ thống Shadow AI đã kích hoạt. Sẵn sàng tiếp nhận chỉ thị.</div>`;
+      document.getElementById('chatBox').innerHTML = `<div class="msg bot">Hệ thống Shadow AI đã kích hoạt.</div>`;
       pendingImage = null;
       document.getElementById('imagePreview').classList.remove('active');
     }
@@ -492,6 +599,7 @@
     function saveAndRender() {
       localStorage.setItem('shadow_sessions', JSON.stringify(sessions));
       renderChatList();
+      if (currentUser) saveToFirebase();
     }
 
     function renderChatList() {
@@ -515,23 +623,19 @@
       if(session && session.history.length > 0) {
         session.history.forEach(msg => appendMsgUI(msg.text, msg.sender, false, msg.image));
       } else {
-        box.innerHTML = `<div class="msg bot">Hệ thống Shadow AI đã kích hoạt. Sẵn sàng tiếp nhận chỉ thị.</div>`;
+        box.innerHTML = `<div class="msg bot">Hệ thống Shadow AI đã kích hoạt.</div>`;
       }
       pendingImage = null;
       document.getElementById('imagePreview').classList.remove('active');
     }
 
-    // Show typing indicator
+    // ====== TYPING EFFECT ======
     function showTyping() {
       const box = document.getElementById('chatBox');
       const typing = document.createElement('div');
       typing.className = 'typing-indicator';
       typing.id = 'typingIndicator';
-      typing.innerHTML = `
-        <div class="typing-dots">
-          <span></span><span></span><span></span>
-        </div>
-      `;
+      typing.innerHTML = `<div class="typing-dots"><span></span><span></span><span></span></div>`;
       box.appendChild(typing);
       box.scrollTop = box.scrollHeight;
     }
@@ -541,15 +645,48 @@
       if (typing) typing.remove();
     }
 
-    // Stream response từ Gemini
-    async function streamResponse(text) {
+    // ====== SEND MESSAGE ======
+    async function sendMsg() {
+      const input = document.getElementById('userInput');
+      const text = input.value.trim();
+      
+      if (!text && !pendingImage) return;
+
+      input.value = '';
+      input.style.height = 'auto';
+
+      let content = text || '';
+      let imageData = pendingImage;
+      
+      if (imageData) {
+        appendMsgUI(content || '📷 Ảnh đã gửi', 'user', true, imageData);
+      } else {
+        appendMsgUI(content, 'user', true, null);
+      }
+
+      pendingImage = null;
+      document.getElementById('imagePreview').classList.remove('active');
+
+      if (API_KEY === "YOUR_GEMINI_API_KEY_HERE") {
+        appendMsgUI("Lỗi: Chưa cấu hình API Key.", 'bot', true, null);
+        return;
+      }
+
+      let session = sessions.find(s => s.id === currentSessionId);
+      if (session && session.title === "Cuộc trò chuyện mới") {
+        session.title = content.length > 25 ? content.substring(0, 25) + '...' : content || "Chat với ảnh";
+        saveAndRender();
+      }
+
+      showTyping();
+
       try {
         const systemPrompt = getSystemPrompt();
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: systemPrompt + "\n\nUser: " + text }] }]
+            contents: [{ parts: [{ text: systemPrompt + "\n\nUser: " + (content || "Xem ảnh này") }] }]
           })
         });
         
@@ -558,7 +695,6 @@
         const data = await res.json();
         if (data.candidates && data.candidates[0] && data.candidates[0].content) {
           const reply = data.candidates[0].content.parts[0].text;
-          // Type từ từ
           const box = document.getElementById('chatBox');
           const msgDiv = document.createElement('div');
           msgDiv.className = 'msg bot';
@@ -574,76 +710,27 @@
               msgDiv.textContent = currentText;
               box.scrollTop = box.scrollHeight;
               index++;
-              // Tốc độ random để giống đang gõ thật
               const delay = 15 + Math.random() * 25;
               setTimeout(typeChar, delay);
             } else {
-              // Lưu tin nhắn sau khi gõ xong
               let session = sessions.find(s => s.id === currentSessionId);
               if (session) {
                 session.history.push({ text: reply, sender: 'bot', image: null });
                 localStorage.setItem('shadow_sessions', JSON.stringify(sessions));
+                if (currentUser) saveToFirebase();
               }
             }
           }
+          hideTyping();
           typeChar();
         } else {
           throw new Error('Invalid response from Gemini');
         }
       } catch (e) {
         console.error('Error:', e);
-        appendMsgUI("Đã xảy ra lỗi với lõi hệ thống. Vui lòng kiểm tra API Key và kết nối.", 'bot', true, null);
+        hideTyping();
+        appendMsgUI("Đã xảy ra lỗi với lõi hệ thống. Vui lòng kiểm tra kết nối.", 'bot', true, null);
       }
-    }
-
-    async function sendMsg() {
-      const input = document.getElementById('userInput');
-      const text = input.value.trim();
-      
-      if (!text && !pendingImage) return;
-
-      input.value = '';
-      input.style.height = 'auto';
-
-      // Tạo message content
-      let content = text || '';
-      let imageData = pendingImage;
-      
-      // Hiển thị tin nhắn user
-      if (imageData) {
-        appendMsgUI(content || '📷 Ảnh đã gửi', 'user', true, imageData);
-      } else {
-        appendMsgUI(content, 'user', true, null);
-      }
-
-      // Xóa preview
-      pendingImage = null;
-      document.getElementById('imagePreview').classList.remove('active');
-
-      // Kiểm tra API Key
-      if (API_KEY === "YOUR_GEMINI_API_KEY_HERE") {
-        appendMsgUI("Lỗi: Chưa cấu hình API Key trong mã nguồn.", 'bot', true, null);
-        return;
-      }
-
-      // Đặt tên chat
-      let session = sessions.find(s => s.id === currentSessionId);
-      if (session && session.title === "Cuộc trò chuyện mới") {
-        session.title = content.length > 25 ? content.substring(0, 25) + '...' : content || "Chat với ảnh";
-        saveAndRender();
-      }
-
-      // Show typing indicator
-      showTyping();
-
-      // Gửi request
-      let fullText = content;
-      if (imageData) {
-        fullText = content ? content + " [Có kèm ảnh]" : "[Ảnh]";
-      }
-      
-      await streamResponse(fullText);
-      hideTyping();
     }
 
     function appendMsgUI(text, sender, save, image) {
@@ -669,10 +756,12 @@
         if (session) {
           session.history.push({ text, sender, image });
           localStorage.setItem('shadow_sessions', JSON.stringify(sessions));
+          if (currentUser) saveToFirebase();
         }
       }
     }
 
+    // ====== HANDLERS ======
     function handleKeyDown(e) {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -681,8 +770,7 @@
     }
 
     function togglePlusMenu() {
-      const menu = document.getElementById('plusMenu');
-      menu.classList.toggle('active');
+      document.getElementById('plusMenu').classList.toggle('active');
     }
 
     function triggerUpload(type) {
@@ -696,22 +784,19 @@
 
     function handleFileSelected(event) {
       const file = event.target.files[0];
-      if (file) {
-        if (file.type.startsWith('image/')) {
-          const reader = new FileReader();
-          reader.onload = function(e) {
-            pendingImage = e.target.result;
-            document.getElementById('previewImage').src = pendingImage;
-            document.getElementById('previewInfo').textContent = file.name;
-            document.getElementById('imagePreview').classList.add('active');
-          };
-          reader.readAsDataURL(file);
-        } else {
-          // File không phải ảnh
-          pendingImage = null;
-          appendMsgUI(`[Đã tải lên: ${file.name}]`, 'user', true, null);
-          appendMsgUI(`Đã nhận file "${file.name}". Vui lòng cung cấp thêm thông tin.`, 'bot', true, null);
-        }
+      if (file && file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          pendingImage = e.target.result;
+          document.getElementById('previewImage').src = pendingImage;
+          document.getElementById('previewInfo').textContent = file.name;
+          document.getElementById('imagePreview').classList.add('active');
+        };
+        reader.readAsDataURL(file);
+      } else if (file) {
+        pendingImage = null;
+        appendMsgUI(`[Đã tải lên: ${file.name}]`, 'user', true, null);
+        appendMsgUI(`Đã nhận file "${file.name}".`, 'bot', true, null);
       }
     }
 
@@ -731,12 +816,6 @@
       const newTheme = current === 'dark' ? 'light' : 'dark';
       html.setAttribute('data-theme', newTheme);
       document.getElementById('themeLabel').textContent = newTheme === 'dark' ? 'Tối' : 'Sáng';
-    }
-
-    // Google Login
-    function loginWithGoogle() {
-      // Mở popup settings
-      openSettings();
     }
 
     function openSettings() {
@@ -760,7 +839,7 @@
       localStorage.setItem('shadow_user_settings', JSON.stringify(userSettings));
       updateUserInfo();
       closeSettings();
-      
+      if (currentUser) saveToFirebase();
       appendMsgUI(`Đã cập nhật cài đặt.`, 'bot', true, null);
     }
 
@@ -768,7 +847,8 @@
       if (e.target === this) closeSettings();
     });
 
-    init();
+    // ====== INIT ======
+    loadLocalData();
   </script>
 </body>
 </html>
